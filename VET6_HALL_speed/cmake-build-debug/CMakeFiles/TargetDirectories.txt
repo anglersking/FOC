@@ -1,0 +1,3 @@
+C:/Users/41884/CLionProjects/VET6_HALL_speed/cmake-build-debug/CMakeFiles/VET6_HALL_speed.elf.dir
+C:/Users/41884/CLionProjects/VET6_HALL_speed/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Users/41884/CLionProjects/VET6_HALL_speed/cmake-build-debug/CMakeFiles/rebuild_cache.dir
