@@ -97,6 +97,31 @@ float get_angle()
 
     return angle_table[hall_state];
 }
+void svpwm(float* alpha_beta, float* duty_cycle)
+{
+    float Udc = 1.0; // 假设直流电压为1V
+    float T = 1.0 / (2 * PI * 50); // 假设频率为50Hz，周期T
+    float m = sqrtf(3); // 调制比
+    float Vd = alpha_beta[0] * m / 2;
+    float Vq = alpha_beta[1] * m / 2;
+    float t0, t1, t2, dt;
+
+    float sector = floorf((atan2f(Vq, Vd) + PI) / (PI / 3)) + 1;
+    float magnitude = sqrtf(Vd * Vd + Vq * Vq);
+    float angle = atan2f(Vq, Vd) - (sector - 1) * (PI / 3);
+
+    if (magnitude > Udc / 2)
+        magnitude = Udc / 2;
+
+    t1 = magnitude * sinf(PI / 3 - angle) / Udc;
+    t2 = magnitude * sinf(angle) / Udc;
+    t0 = (T - 3 * (t1 + t2)) / 6;
+
+    duty_cycle[0] = t1 + t0;
+    duty_cycle[1] = t2 + t0;
+    duty_cycle[2] = t0;
+}
+
 int main()
 {
     float current[3] = {1.0, 2.0, 3.0}; // 假设当前的三相电流分别为1A、2A和3A
@@ -131,6 +156,13 @@ int main()
     printf("Va = %f\n", alpha_beta[0]);
     printf("Vb = %f\n", alpha_beta[1] * cosf(PI / 3) - alpha_beta[0] * sinf(PI / 3));
     printf("Vc = %f\n", alpha_beta[1] * cosf(PI / 3) + alpha_beta[0] * sinf(PI / 3));
+
+    float duty_cycle[3];
+    svpwm(alpha_beta, duty_cycle);
+
+    printf("SVPWM Duty Cycle A: %f\n", duty_cycle[0]);
+    printf("SVPWM Duty Cycle B: %f\n", duty_cycle[1]);
+    printf("SVPWM Duty Cycle C: %f\n", duty_cycle[2]);
 
     return 0;
 }
