@@ -30,6 +30,12 @@
 
 
 #define PI 3.14159265358979323846 // 定义圆周率
+float MotorSpeed  = 0.0f ;// 电机转速,这里是占空比,
+
+_Bool isTimeUp    = 0;     // 计时标记
+uint32_t timeTick = 0;   // 计时标记
+float Speed_hz    = 0 ;
+#define TIMECNT 800
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,8 +51,35 @@
 #define HALL_V_GPIO_Port GPIOA
 #define HALL_W_Pin GPIO_PIN_2
 #define HALL_W_GPIO_Port GPIOA
+
+#define HALL_TIM_CH1_PORT                GPIOA          // CH1??????
+#define HALL_TIM_CH1_PIN                 GPIO_PIN_0
+#define HALL_TIM_CH1                     TIM_CHANNEL_1
+
+#define HALL_TIM_CH2_PORT                GPIOA          // CH2??????
+#define HALL_TIM_CH2_PIN                 GPIO_PIN_1
+#define HALL_TIM_CH2                     TIM_CHANNEL_2
+
+#define HALL_TIM_CH3_PORT                GPIOA          // CH3??????
+#define HALL_TIM_CH3_PIN                 GPIO_PIN_2
+#define HALL_TIM_CH3                     TIM_CHANNEL_3
+
+#define HALL_TIM_IRQn                    TIM5_IRQn
+#define HALL_TIM_IRQHanler               TIM5_IRQHandler
+
 #define MOTOR_ENCODER_PPR 24 //电机编码器的线数
 #define POLE_PAIRES                      4 // 无刷电机4对极
+typedef enum
+{
+    MOTOR_DIR_CW = 0, // 顺时针转动
+    MOTOR_DIR_CCW     // 逆时针转动
+}MotorDir_Typedef;  // 方向定义
+
+
+MotorDir_Typedef RT_hallDir = MOTOR_DIR_CW; // 霍尔顺序得到的电机转动方向
+//const uint8_t HallDirCcw [7] = {0, 5, 3, 1, 6, 4, 2};    // PMSM 的逆时针旋转序列
+
+
 #define PPR                             (POLE_PAIRES*2*3) // (4*2*3) 脉冲每转,
 __IO uint32_t RT_hallcomp = 0;  // 霍尔计数值
 __IO uint32_t RT_hallcnt = 0;   // 霍尔计数值
@@ -60,6 +93,8 @@ int LS_hallPhase=0;
 uint16_t hallState = 0, currentCount = 0, prevCount = 0, rpm = 0;
 ////const int HallDirCcw [7] = {0, 5, 3, 1, 6, 4, 2};    // PMSM 的???时针旋转序??
 //
+#define HALL_TIM_PRESCALER               83  // ????????????1MHz
+#define HALL_TIM_FREQ                (84e6/(HALL_TIM_PRESCALER+1)) // ????????????
 const int HallDirCcw [7] = {0, 5, 3, 1, 6, 4, 2};    // PMSM 的???时针旋转序??
 /* USER CODE END PM */
 
@@ -84,92 +119,17 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 
     if (htim == &htim2)
     {
-//       printf("time2\n");
-//        hallState = ((HAL_GPIO_ReadPin(HALL_U_GPIO_Port, HALL_U_Pin)) << 2) |
-//                    ((HAL_GPIO_ReadPin(HALL_V_GPIO_Port, HALL_V_Pin)) << 1) |
-//                    HAL_GPIO_ReadPin(HALL_W_GPIO_Port, HALL_W_Pin);
-//        uint8_t hall_u_value = HAL_GPIO_ReadPin(HALL_U_GPIO_Port, HALL_U_Pin);
-//        uint8_t hall_v_value = HAL_GPIO_ReadPin(HALL_V_GPIO_Port, HALL_V_Pin);
-//        uint8_t hall_w_value = HAL_GPIO_ReadPin(HALL_W_GPIO_Port, HALL_W_Pin);
-//        HAL_UART_Transmit(&huart1,(uint8_t *)hallState, sizeof((uint8_t *)hallState),10);
 
-//        sprintf(buffer, "%u\r\n", hallState);
-//
-//        HAL_UART_Transmit(&huart1, (uint8_t *)buffer, strlen(buffer), 100);
-//        sprintf(buffer_sta, "Hall U: %u, Hall V: %u, Hall W: %u\r\n", hall_u_value, hall_v_value, hall_w_value);
-//        HAL_UART_Transmit(&huart1, (uint8_t *)buffer_sta, strlen(buffer_sta), 100);
-//
-//        HAL_UART_Transmit(&huart1,(uint8_t *) "Time2 in\n", 9, 100);
         convert();
 
-//
-//        if (hallState != 0 && hallState != 7)
-//        {
-//            // 计算电机转一圈的脉冲????
-//            currentCount = __HAL_TIM_GET_COUNTER(&htim2);
-//            int16_t countDiff = currentCount - prevCount;
-//            if (countDiff < 0)
-//            {
-//                countDiff += htim2.Init.Period;
-//            }
-//            prevCount = currentCount;
-//
-//            //计算转???(rpm)
-//            rpm = ((countDiff * 60 * HAL_RCC_GetPCLK2Freq()) / (htim2.Init.Prescaler * MOTOR_ENCODER_PPR * htim2.Instance->ARR));
-//        }
+
     }
+    RT_hallcnt++; // 记录进入中断次数
+    /* 记录时间,假定不会溢出 */
+    RT_hallcomp = __HAL_TIM_GET_COMPARE(htim,HALL_TIM_CH1);
+
 }
-//static float speed = 0.0f;
-//static uint32_t last_capture_time = 0;
-//#define TICK_FREQ 84000000
-//#define SENSOR_PPR 6
-//#define PRINT_PERIOD 500 // 打印周期，单位ms
-//void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
-//{
-//    if (htim->Instance == TIM2 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) {
-//        uint32_t current_time = HAL_GetTick();
-//        uint32_t interval = current_time - last_capture_time;
-//        last_capture_time = current_time;
-//        if (interval > 0 && interval < PRINT_PERIOD) {
-//            // 计算当前速度
-//            float freq = (float)TICK_FREQ / (float)interval;
-//            speed = freq * 60.0f / SENSOR_PPR;
-//            printf("%f\n",speed);
-//        }
-//    }
-//}
-// void HALLSensor_Init()
-//{
-//    GPIO_InitTypeDef GPIO_InitStruct = {0};
-//
-//    __HAL_RCC_GPIOA_CLK_ENABLE();
-//
-//    GPIO_InitStruct.Pin = HALL_U_Pin | HALL_V_Pin | HALL_W_Pin;
-//    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-//    GPIO_InitStruct.Pull = GPIO_PULLUP;
-//    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-//
-//    __HAL_RCC_TIM1_CLK_ENABLE();
-//
-//    htim2.Instance = TIM2;
-//    htim2.Init.Prescaler = 0;
-//    htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-//    htim2.Init.Period = 65535;
-//    htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-//    htim2.Init.RepetitionCounter = 0;
-//    htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-//    HAL_TIM_Base_Init(&htim2);
-//
-//
-//
-//    HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
-//    HAL_NVIC_SetPriority(TIM2_IRQn, 0, 0);
-//    HAL_NVIC_EnableIRQ(TIM2_IRQn);
-//
-//
-//
-//
-//}
+
 void HALLSensor_Init()
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -222,76 +182,42 @@ int32_t HALL_GetPhase1()
     tmp |= HAL_GPIO_ReadPin(HALL_W_GPIO_Port, HALL_W_Pin);//W(C)
     return (tmp & 0x0007); // 取低三位
 }
-//float get_angle()
-//{
-//    // 假设使用GPIO连接三组霍尔传感器，A相连接PA0、PB1，B相连接PA1、PB2，C相连接PA2、PB10
-//    uint8_t hall_state = HALL_GetPhase();
-//
-//    static const float angle_table[8] = {0.0, 60.0, 120.0, 180.0, -120.0, -60.0}; // 存储不同状态下的角度值
-//
-//    return angle_table[hall_state];
-//}
-//float get_theta()
-//{
-//    // 假设使用GPIO连接三组霍尔传感器，A相连接PA0、PB1，B相连接PA1、PB2，C相连接PA2、PB10
-//    uint8_t hall_state = HALL_GetPhase();
-//    float theta = atan2f(sin60[hall_state], cos60[hall_state]); // 计算瞬时角度，sin60和cos60存储了不同状态下的正弦和余弦值
-//
-//    return theta;
-//}
+
 void convert()
 {
     // printf("a:%d,b:%d,c:%d\n",u,v,w);
     int RT_hallPhase = 0; // 霍尔信号
     RT_hallPhase = HALL_GetPhase1();     // 获取霍尔引脚的相??
-    printf("RT_hallPhase:%d\n",RT_hallPhase);
-    printf("LS_hallPhase:%d\n",LS_hallPhase);
-    printf("相位 dic HallDirCcw [相位:%d]:值:%d,上一次相位:LS_hallPhase:%d\n",RT_hallPhase,HallDirCcw[RT_hallPhase],LS_hallPhase);
-
-            hallState = ((HAL_GPIO_ReadPin(HALL_U_GPIO_Port, HALL_U_Pin)) << 2) |
-                    ((HAL_GPIO_ReadPin(HALL_V_GPIO_Port, HALL_V_Pin)) << 1) |
-                    HAL_GPIO_ReadPin(HALL_W_GPIO_Port, HALL_W_Pin);
-
+//    printf("RT_hallPhase:%d\n",RT_hallPhase);
+//    printf("LS_hallPhase:%d\n",LS_hallPhase);
+//    printf("引脚电平,PA0(U) %d PA1(V) %d PA2(W) %d\n",(HAL_GPIO_ReadPin(HALL_U_GPIO_Port, HALL_U_Pin)),
+//           (HAL_GPIO_ReadPin(HALL_U_GPIO_Port, HALL_V_Pin)), HAL_GPIO_ReadPin(HALL_W_GPIO_Port, HALL_W_Pin));
+//    printf("相位 dic HallDirCcw [相位:%d]:值:%d,上一次相位:LS_hallPhase: %d\n",RT_hallPhase,HallDirCcw[RT_hallPhase],LS_hallPhase);
 
 
 
     /* 判断方向 */
-    if(HallDirCcw[RT_hallPhase] == LS_hallPhase) // 序列与表中的????
+    if(HallDirCcw[RT_hallPhase] == LS_hallPhase ) // 序列与表中的????
     {
 
-        printf("反转\n");
+//        printf("顺时针转\n");
+        RT_hallDir = MOTOR_DIR_CCW;
+    }
+    else if (RT_hallPhase == LS_hallPhase)
+    {
+
     }
     else{
-       printf("正转\n");
+//       printf("逆时针转\n");
+        RT_hallDir = MOTOR_DIR_CW;
     }
 
-//
 
-    if (hallState != 0 && hallState != 7)
-    {
-        // 计算电机转一圈的脉冲????
-        currentCount = __HAL_TIM_GET_COUNTER(&htim2);
-
-        int16_t countDiff = currentCount - prevCount;
-        if (countDiff < 0)
-        {
-            countDiff += htim2.Init.Period;
-        }
-        prevCount = currentCount;
-
-        //计算转???(rpm)
-        rpm = ((countDiff * 60 * HAL_RCC_GetPCLK2Freq()) / (htim2.Init.Prescaler * MOTOR_ENCODER_PPR * htim2.Instance->ARR));
-        printf("currentCount:%d,prevCount:%d, htim2.Init.Period:%d,分子:%d,分母:%d,转速:%d\n",currentCount,prevCount, htim2.Init.Period,
-               (countDiff * 60 * HAL_RCC_GetPCLK2Freq()),htim2.Init.Prescaler ,rpm);
-    }
     LS_hallPhase = RT_hallPhase; // 记录这一个的霍尔??
-    printf("now LS_hallPhase:%d,RT_hallPhase:%d\n",LS_hallPhase,RT_hallPhase);
-    printf("------------------------------\n");
+//    printf("now LS_hallPhase:%d,RT_hallPhase:%d\n",LS_hallPhase,RT_hallPhase);
+//    printf("------------------------------\n");
 }
-float MotorSpeed  = 0.0f ;// ???????,?????????,
-//
-//_Bool isTimeUp    = 0;     // ??????
-//uint32_t timeTick = 0;   // ??????
+
 //extern MotorSta_Typedef Motor_State; // ??????????
 //extern MotorDir_Typedef Motor_Dir;  // ?????? ,?????
 //extern float PWM_Duty;        // 25%?????
@@ -355,14 +281,39 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1) {
-      encoder_left = (short)TIM1->CNT ;
+
+      if( isTimeUp )
+      {
+          uint32_t tmpCC = 0;
+          if(RT_hallcnt == 0) // 避免除数为0
+          {
+              Speed_hz = 0;
+          }
+          else
+          {
+              tmpCC = RT_hallcomp / RT_hallcnt; // tmpCC:两次捕获之间的捕获值,
+              Speed_hz = (float)HALL_TIM_FREQ/(float)(tmpCC);
+          }
+          RT_hallcomp = 0;
+          RT_hallcnt  = 0;
+          /* 霍尔信号的频率,转速rps,转速rpm */
+          if(RT_hallDir == MOTOR_DIR_CW)
+              Speed_hz = fabs(Speed_hz);
+          else
+              Speed_hz = -fabs(Speed_hz);
+          /* 未做任何滤波的速度值 */
+          printf("%.3f Hz, %.2f RPS, %.2fRPM\n", Speed_hz, Speed_hz/PPR, (Speed_hz/PPR)*60);
+
+          isTimeUp = 0;
+          timeTick = TIMECNT;
+      }
+//      encoder_left = (short)TIM1->CNT ;
+//
+//
+//      TIM1->CNT = 0;
+//      printf("encoder_left %d\n",encoder_left);
 
 
-      TIM1->CNT = 0;
-      printf("encoder_left %d\n",encoder_left);
-
-
-      HAL_Delay(100);
 
 //      printf("rpm%d\n",rpm);
 //      rpm=0;
@@ -405,7 +356,7 @@ int main(void)
 //      printf("gpio uvw %d,%d,%d\n", HAL_GPIO_ReadPin(HALL_U_GPIO_Port, HALL_U_Pin),
 //             HAL_GPIO_ReadPin(HALL_V_GPIO_Port, HALL_V_Pin),
 //             HAL_GPIO_ReadPin(HALL_W_GPIO_Port, HALL_W_Pin));
-      HAL_Delay(100);
+
 //     printf("%d\n",HALL_GetPhase());
 //      convert();
 //      printf("angle %f",get_angle());
@@ -461,22 +412,32 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+    /**Configure the Systick interrupt time
+     */
+    HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/1000);
+
+    /**Configure the Systick
+    */
+    HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK);
+
+    /* SysTick_IRQn interrupt configuration */
+    HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }
 
 /* USER CODE BEGIN 4 */
 
 
-//void HAL_SYSTICK_Callback()
-//{
-////    printf("hal_systick\n");
-//    if(timeTick != 0)
-//        timeTick--;
-//    if(timeTick == 0)
-//    {
-//        isTimeUp = 1;
-//    }
-//
-//}
+void HAL_SYSTICK_Callback()
+{
+//   printf("hal_systick\n");
+    if(timeTick != 0)
+        timeTick--;
+    if(timeTick == 0)
+    {
+        isTimeUp = 1;
+    }
+
+}
 /* USER CODE END 4 */
 
 /**
